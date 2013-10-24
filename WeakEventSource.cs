@@ -18,16 +18,24 @@ namespace DNQ.Events
         private readonly List<System.WeakReference>[] _listeners;
         private readonly int _sourceID;
 
-        protected WeakEventSource(string[] events)
-        {
+        private readonly Action<int, string> _logger;
+
+        protected WeakEventSource(string[] events, Action<int, string> logger)
+        {            
             _sourceID = System.Threading.Interlocked.Increment(ref _sourceSequenceNumber);            
             _weakEvents = (string[])events.Clone();
+            _logger = logger;
 
             _listeners = new List<WeakReference>[events.Length];
             for (int i = 0; i < events.Length; i++)
             {
                 _listeners[i] = new List<WeakReference>();
             }
+        }
+
+        protected WeakEventSource(string[] events)
+            : this(events, null)
+        {
         }
 
         public IEnumerable<string> EnumerateWeakEvents()
@@ -48,23 +56,25 @@ namespace DNQ.Events
                         if (HasTarget(_listeners[i], target) == null)
                         {                            
                             _listeners[i].Add(new WeakReference(target));
-#if DEBUG
-                            Console.WriteLine("---- WEAK_EVT_SRC {0}: Attmepting to attach listener for event {1}... OK (target added)", _sourceID, eventName);
-#endif
+                            if (_logger != null)
+                            {
+                                _logger(5, string.Format("WEAK_EVT_SRC {0}. Attmept to attach listener for event {1}... OK [target added]; Target ID = {2}", _sourceID, eventName, target.TargetFriendlyID));
+                            }
                         }
                         else
                         {
-#if DEBUG
-                            Console.WriteLine("---- WEAK_EVT_SRC {0}: Attmepting to attach listener for event {1}... IGNORED (target already listening)", _sourceID, eventName);
-#endif
+                            if (_logger != null)
+                            {
+                                _logger(4, string.Format("WEAK_EVT_SRC {0}: Attmept to attach listener for event {1}... IGNORED [target already listening]; Target ID = {2}", _sourceID, eventName, target.TargetFriendlyID));
+                            }
                         }
                         break;
                     }
                 }
 
-                if (!eventFound)
+                if (!eventFound && _logger != null)
                 {
-                    Console.WriteLine("---- WEAK_EVT_SRC {0}: Attmepting to attach listener for event {1}... FAILED (no such event)", _sourceID, eventName);
+                    _logger(2, string.Format("WEAK_EVT_SRC {0}: Attmept to attach listener for event {1}... FAILED [no such event]; Target ID = {2}", _sourceID, eventName, target.TargetFriendlyID));
                 }
             }            
         }
@@ -113,15 +123,17 @@ namespace DNQ.Events
 
                 if (targetRemoved > 0)
                 {
-#if DEBUG
-                    Console.WriteLine("---- WEAK_EVT_SRC {0}: Attmepting to detach listener for event {1}... OK (target removed {2} times)", _sourceID, eventName, targetRemoved);
-#endif
+                    if (_logger != null)
+                    {
+                        _logger(4, string.Format("WEAK_EVT_SRC {0}: Attmept to detach listener for event {1}... OK [target removed {2} time(s)]; Target ID = {3}", _sourceID, eventName, targetRemoved, target.TargetFriendlyID));
+                    }
                 }
                 else
                 {
-#if DEBUG
-                    Console.WriteLine("---- WEAK_EVT_SRC {0}: Attmepting to detach listener for event {1}... FAILED (either target did not exist or no such event)", _sourceID, eventName);
-#endif
+                    if (_logger != null)
+                    {
+                        _logger(2, string.Format("WEAK_EVT_SRC {0}: Attmept to detach listener for event {1}... FAILED [target did not exist or no such event]; Target ID = {2}", _sourceID, eventName, target.TargetFriendlyID));
+                    }
                 }
             }
         }        
@@ -141,9 +153,10 @@ namespace DNQ.Events
                         }
                         catch(Exception exc)
                         {
-#if DEBUG
-                            Console.WriteLine(" * WEAK_EVT_SRC ERROR NOTIFYING TARGET: " + exc.ToString());
-#endif
+                            if (_logger != null)
+                            {
+                                _logger(1, string.Format("WEAK_EVT_SRC {0}: ERROR NOTIFYING TARGET ({1}) {2}; StackTrace: {3}", _sourceID, exc.GetType(), exc.Message, (exc.StackTrace != null ? exc.StackTrace.Replace("\r", "").Replace("\n", " ") : " -- STACK TRACE NOT AVAILABLE -- ")));                                
+                            }
                         }
                     }
                     else
